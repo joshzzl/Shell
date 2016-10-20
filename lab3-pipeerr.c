@@ -18,8 +18,8 @@ int main() {
 		if (res == 0)
 			printf("Child: EOF is reached -- No one holds the write end!!\n");
 	} else {  //in parent
-		sleep(3);
-		close(pfd[1]);  //close the write end
+		sleep(10);
+		//close(pfd[1]);  //close the write end
 		printf("Press enter to close the program\n");
 		getchar();
 	}

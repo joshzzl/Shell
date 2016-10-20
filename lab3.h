@@ -16,7 +16,7 @@
 #define TITLE "PID       CMD       UTIME     STIME     \n"
 #define FORMAT_STR "%-10d%-10s%-5lfs    %-5lfs    \n"
 #define EXIT "exit"
-#define CHILD "&"
+#define BACKGD "&"
 #define ERROR_MSG "Executing: %s\nError Message: \n\t%s\n"
 
 typedef int bool;
@@ -40,4 +40,6 @@ int execute(char* argv[]){
 }
 
 void sigchld_handler(int signum, siginfo_t *sig, void* context);
-//void sigint_handler(int signum, siginfo_t *sig, void* context);
+
+
+int split(char* line, char*** commands, const char* delim);
