@@ -15,9 +15,12 @@
 
 #define TITLE "PID       CMD       UTIME     STIME     \n"
 #define FORMAT_STR "%-10d%-10s%-5lfs    %-5lfs    \n"
+#define TIMEX "timeX"
 #define EXIT "exit"
 #define BACKGD "&"
 #define ERROR_MSG "Executing: %s\nError Message: \n\t%s\n"
+#define STDIN 0
+#define STDOUT 1
 
 typedef int bool;
 #define true 1
