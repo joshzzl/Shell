@@ -78,9 +78,12 @@ int main(){
     //change the newline char to nul char
     char *newline = strchr(line, '\n');
     *newline = '\0';
+
+    //int len_temp = getComNum(line, '|');
     
     char** commands = NULL;
     num_Com = split(buf, &commands, (char*)"|");
+    //fprintf(stdout, "Len_temp: %d   num_Com: %d\n", len_temp, num_Com);
     if(num_Com == -1){
       fprintf(stderr, "Error in splitting\n");
       return EXIT_FAILURE;
@@ -117,9 +120,12 @@ int main(){
       continue;
     }
     series = temp;
+    
 
     //Error checking and preparing the arguments for exec()
     int i;
+    for(i=0; i<num_Com; i++)
+      series[i]=NULL;
     for(i=0; i<num_Com; i++){
       //fprintf(stdout, "%s___\n", commands[i]);
       char** args = NULL;
@@ -255,6 +261,7 @@ int main(){
     
     
     //fprintf(stdout, "still okay at 253\n");
+    
     
     bool error_prep = false;
     int pip_num = num_Com -1;
@@ -392,9 +399,9 @@ int main(){
       }else{
         fprintf(stdout, "Still okay at 386\n");
         
-        /*if(!backgd){
+        if(!backgd){
           pid_com[i] = pid; 
-        }*/
+        }
         fprintf(stdout, "Still okay at 395\n");
       }
     }
@@ -443,8 +450,8 @@ int main(){
         int status;
         waitpid(pid_test, &status, 0);
 
-        //if(pid_com[i]>0)
-          //waitpid(pid_com[i], &status, 0);
+        if(pid_com[i]>0)
+          waitpid(pid_com[i], &status, 0);
       }
     }
 
@@ -458,6 +465,7 @@ int main(){
       }
       free(pfd);
     }
+    
     for(i=0; i<num_Com; i++){
       if(series[i] != NULL)
         free(series[i]);
@@ -513,4 +521,17 @@ int split(char* line, char*** commands, const char* delim){
   }
   *commands = args;
   return length;
+}
+
+int getComNum(char* line, char delim){
+  if((*line)=='\0')
+    return 0;
+  int len = 1;
+  char* next = strchr(line, (int)delim);
+  while(next != NULL){
+    len++;
+    line = ++next;
+    next = strchr(line, (int)delim);
+  }
+  return len;
 }

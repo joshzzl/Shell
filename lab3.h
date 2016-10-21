@@ -46,3 +46,5 @@ void sigchld_handler(int signum, siginfo_t *sig, void* context);
 
 
 int split(char* line, char*** commands, const char* delim);
+
+int getComNum(char* line, char delim);
