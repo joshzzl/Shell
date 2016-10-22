@@ -1,6 +1,7 @@
 /*
  * library file for lab2 exercise
  * Author: ZHANG Zhili
+ * UID: 3035141243
  */
 
 
@@ -24,6 +25,11 @@
 #define STDIN 0
 #define STDOUT 1
 
+struct foreground{
+  int num;
+  int* pids;
+};
+typedef struct foreground foreground;
 
 typedef int bool;
 #define true 1
@@ -32,6 +38,8 @@ typedef int bool;
 void sigchld_handler(int signum, siginfo_t *sig, void* context);
 
 void sigusr_handler(int signum);
+
+void sigint_handler(int signum);
 
 int split(char* line, char*** commands, const char* delim);
 
@@ -42,3 +50,9 @@ void usage();
 void getInput(char** deref_line, char* buf);
 
 void freeP(int* pid, int num, int* pfd[]);
+
+void freeFg();
+
+int addToFg(int pid);
+
+void fgTerm(int pid);

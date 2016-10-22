@@ -1,14 +1,28 @@
 /*
- * Helper methods for shell
+ * Author: ZHANG Zhili
+ * UID: 3035141243
  */
 
+/*
+ * Helper methods for shell
+ */
 #include "shellStrings.h"
-#include "lab3.h"
+#include "myshell.h"
 
 extern int usr_flag;
+extern foreground fg;
 
-
+//SIGCHLD handler
 void sigchld_handler(int signum, siginfo_t *sig, void* context){
+  int id = (int)sig->si_pid;
+  int i;
+  bool fgProcess=false;
+  for(i=0; i<fg.num; i++){
+    if(fg.pids[i]==id)
+      fgProcess=true;
+  }
+  if(fgProcess)
+    return;
   pid_t child_pid;
   int status;
   child_pid = waitpid(-1, &status, WNOHANG);
@@ -18,11 +32,27 @@ void sigchld_handler(int signum, siginfo_t *sig, void* context){
   }
 }
 
+//modify the fg.pids when a foreground child process is terminating
+void fgTerm(int pid){
+  int i;
+  for(i=0; i<fg.num; i++){
+    if(fg.pids[i]==pid)
+      fg.pids[i]=-1;
+  }
+}
+
+//SIGUSR handler
 void sigusr_handler(int signum){
   usr_flag=true;
 }
 
+//SIGINT handler
+void sigint_handler(int signum){
+  fprintf(stdout, "\n");
+  //usage();
+}
 
+//split the entire line into commands with delim as delimiter
 int split(char* line, char*** commands, const char* delim){
   
   int length = 0;  //length of the argument array
@@ -49,6 +79,7 @@ int split(char* line, char*** commands, const char* delim){
   return length;
 }
 
+//a method for debugging, used to count the number of '|'
 int getComNum(char* line, char delim){
   if((*line)=='\0')
     return 0;
@@ -62,6 +93,8 @@ int getComNum(char* line, char delim){
   return len;
 }
 
+//get input from stdin and store it in the
+//previously allocated spaces
 void getInput(char** deref_line, char* buf){
   usage();
   char* line = fgets(buf, BUFSIZ, stdin);
@@ -74,6 +107,7 @@ void getInput(char** deref_line, char* buf){
   *deref_line = line;
 }
 
+//free the space allocated when introducing pipes
 void freeP(int* pid, int num, int* pfd[]){
   if(pid != NULL)
         free(pid);
@@ -87,6 +121,26 @@ void freeP(int* pid, int num, int* pfd[]){
       }
 }
 
+//free the space allocated in struct foreground
+void freeFg(){
+  if(fg.pids!=NULL){
+    free(fg.pids);
+  }
+}
+
+//add a pid to fg.pids
+int addToFg(int pid){
+  fg.num++;
+  int* temp = realloc(fg.pids, sizeof(int)*fg.num);
+  if(temp == NULL){
+    return -1;
+  }
+  fg.pids = temp;
+  fg.pids[fg.num-1]=pid;
+  return 0;
+}
+
+//print the shell cursor
 void usage(){
   fprintf(stdout, USGMSG);
 }

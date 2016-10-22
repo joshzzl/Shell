@@ -1,12 +1,14 @@
 /*
- * 
+ * Author: ZHANG Zhili
+ * UID: 3035141243
  */
 
 
 #include "shellStrings.h"
-#include "lab3.h"
+#include "myshell.h"
 
 bool usr_flag; //used by SIGUSR1 handler
+foreground fg;
 
 int main(){
 
@@ -17,8 +19,16 @@ int main(){
   sc.sa_sigaction = sigchld_handler;
   sigaction(SIGCHLD, &sc, NULL);
   
+  fg.num = 0;
+  fg.pids = NULL;
   //Ignore the SIGINT
-  signal(SIGINT, SIG_IGN);
+  struct sigaction si;
+  sigaction(SIGINT, NULL, &si);
+  si.sa_flags = SA_SIGINFO;
+  si.sa_handler = sigint_handler;
+  sigaction(SIGINT, &si, NULL);
+  
+  //signal(SIGINT, sigint_handler);
     
   //input line
   char* line = NULL;
@@ -36,24 +46,27 @@ int main(){
     char *newline = strchr(line, '\n');
     *newline = '\0';
 
-    //int len_temp = getComNum(line, '|');
-    
+    //split the entire line into different commands
     char** commands = NULL;
     num_Com = split(buf, &commands, (char*)PIPE);
     //Error in spliting the input line
     if(num_Com == -1){
       fprintf(stderr, ERR_SPLIT);
-      return EXIT_FAILURE;
+      if(commands!=NULL)
+        free(commands);
+      continue;
     }
 
-    if(num_Com > 5 || num_Com==0 ){
+    if(num_Com > 5 || num_Com==0 ){ //error checking for no command
       if(num_Com >5)
         fprintf(stdout, ERR_5_ARG);
-      free(commands);
+      if(commands != NULL)
+        free(commands);
       getInput(&line, buf);
       continue;
     }
 
+    //allocate space for pointers pointing different argument arrays
     bool error = false;
     bool backgd = false;
     bool timeX = false;
@@ -88,7 +101,7 @@ int main(){
         error = true;
         break;
       }
-      
+      // if "exit" is entered as the first argument in the first command
       if(i==0 && strcmp(args[0], EXIT)==0 ){
         if(length != 1 || num_Com != 1){
           fprintf(stderr, ERR_EXIT_ARG);
@@ -99,11 +112,12 @@ int main(){
           free(args);
           free(commands);
           free(series);
+          freeFg();
           fprintf(stdout, TERM_MSG);
           return EXIT_SUCCESS;
         }
       }
-      
+      // if "timeX" is entered as the first argument in the first command
       if(i==0 && strcmp(args[0], TIMEX)==0 ){
         if(length == 1){
           fprintf(stderr, ERR_TIMEX_ALONE);
@@ -116,13 +130,13 @@ int main(){
       }
       
       bool error_and = false;
+      //get rid of the cases when '&' is wrongly used
       if(i != num_Com -1){   
         int j;
         for(j=0; j<length; j++){
           if(strcmp(args[j], BACKGD) == 0){
             fprintf(stderr, ERR_AND_MIDDLE);
             error_and = true;
-            //free(args);
             break;
           }
         }
@@ -132,7 +146,6 @@ int main(){
           if(strcmp(args[j], BACKGD) == 0){
             fprintf(stderr, ERR_AND_MIDDLE);
             error_and = true;
-            //free(args);
             break;
           }
         }
@@ -141,7 +154,7 @@ int main(){
         error = true;
         break;
       }
-
+      //allocate one more space for (char*)NULL
       char** p = realloc(args, sizeof(char*)*(length+1));
       if(p==NULL){
         fprintf(stderr, ERR_REALLOC);
@@ -151,7 +164,8 @@ int main(){
       args = p;
 
       args[length] = (char*)NULL;
-      
+      //for the  last command only, check if the last argument 
+      //or its last character is "&"('&')
       if(i==num_Com-1){
         char* last = args[length-1];
         if(strcmp(last, BACKGD)==0){
@@ -165,7 +179,11 @@ int main(){
 
       series[i] = args;
     }
-
+    /*
+    if(backgd){
+      fprintf(stdout, "backgd detected\n");
+    }*/
+    //if timeX and & both entered, error
     if(timeX && backgd){
       fprintf(stderr, ERR_TIMEX_BCG);
       error = true;
@@ -180,25 +198,16 @@ int main(){
         free(commands);
       if(series != NULL)
         free(series);
-      
       getInput(&line, buf);
       continue;
     }
-    
-    /*
-    for(i=0; i<num_Com; i++){
-      int j=((timeX && i==0)? 1 : 0);
-      fprintf(stdout, "%ld:  ", sizeof(series[i])/sizeof(char*));
-      while(series[i][j]!= NULL){
-        fprintf(stdout, "%s ", series[i][j++]);
-      }
-      fprintf(stdout, "\n");
-    }*/
     
     bool error_prep = false;
     //fprintf(stdout, "num_Com %d\n", num_Com);
     int pip_num = num_Com -1;
     
+    //prepare the pipes for execution
+    //also allocate spaces to store pids of child processes
     int* pid_com=NULL; // the array storing all pids for child processes
     int* pid_temp = malloc(sizeof(int)*num_Com);
     if(pid_temp == NULL){
@@ -212,7 +221,7 @@ int main(){
     }
     
     int** pfd=NULL; // the pointer points to the pipes
-    //fprintf(stdout, "Pipe number: %d\n", pip_num);
+
     if(pip_num>0){
       int** pfd_temp = malloc(sizeof(int*)*pip_num);
       if(pfd_temp == NULL){
@@ -252,19 +261,22 @@ int main(){
       pipe(pfd[i]);
     }
     
-    //fprintf(stdout, "still okay at 333\n"); 
     bool error_exe=false;
     for(i=0; i<num_Com; i++){
+      
+      //install the SIGUSR1 handler
       signal(SIGUSR1, sigusr_handler);
       int pid = fork();
       //in child process
       if(pid == 0){
-
-        signal(SIGINT, SIG_DFL);
+        //Make the SIGINT handling default
+        if(!backgd)
+          signal(SIGINT, SIG_DFL);
+        else
+          signal(SIGINT, SIG_IGN);
         
         //close the corresponding pipes
-        
-        if(i==0){
+        if(i==0){//the case of the first command
           
           int j;
           for(j=0; j<pip_num; j++){
@@ -278,7 +290,7 @@ int main(){
           if(pip_num>0)
             dup2(pfd[0][1], STDOUT);
         
-        }else if(i==num_Com-1){
+        }else if(i==num_Com-1){//the case of the last command
           
           int j;
           for(j=0; j<pip_num; j++){
@@ -292,7 +304,7 @@ int main(){
           if(pip_num>0)
             dup2(pfd[pip_num-1][0], STDIN);
          
-        }else{
+        }else{//the case of commands that are between pipes
          
           int j;
           for(j=0; j<pip_num; j++){
@@ -309,12 +321,13 @@ int main(){
           dup2(pfd[i][1], STDOUT);
          
         }
-        //bool temp_flag=false;
-        //printf("&&&&%d\n", usr_flag);
+
         while(!usr_flag);
-        //printf("&&&&%d\n", usr_flag);
-        //fprintf(stdout, "Still okay at 376 at %d\n", (int)getpid());
         
+        //define the command for execvp
+        //take 'timeX' effect into consideration
+        //ex. timeX ls -lat, then the command
+        //should be 'ls' instead of 'timeX'
         char* com1= ( i==0 ? ( timeX ? series[i][1] : series[i][0]):series[i][0]);
         char** com2 = series[i];
         if(timeX && i==0)
@@ -329,17 +342,28 @@ int main(){
         error_exe=true;
         break;
       }else{
+        //store the pid into pid_com
         pid_com[i] = pid; 
+
+        if(!backgd){
+          if(addToFg(pid) == -1){
+            error_exe=false;
+            break;
+          }
+        }
+        
+        //send the SIGUSR1 in order to control its execution
         kill(pid, SIGUSR1);
       }
     }
-    
-    int j;
-    for(j=0; j<pip_num; j++){
-      close(pfd[j][0]);
-      close(pfd[j][1]);
+    //in parent, close all pipes
+    if(pip_num>0){
+      int j;
+      for(j=0; j<pip_num; j++){
+        close(pfd[j][0]);
+        close(pfd[j][1]);
+      }
     }
-    
 
     if(error_exe){
       freeP(pid_com, pip_num, pfd);
@@ -355,60 +379,67 @@ int main(){
       continue;
       
     }
-    
+    sleep(1);
+    //if timeX is applied
     if(timeX){
       int k;
+      //for each command
       for(k=0; k<num_Com; k++){
-        siginfo_t info;
+        siginfo_t info;//obtain the siginfo_t
         int result = waitid(P_PID, pid_com[k], &info, WNOWAIT | WEXITED);
         if(result != 0){
-          fprintf(stderr, "Error in (PID: %d) waitid: %s\n", pid_com[k], strerror(errno));
+          fprintf(stderr, ERR_WAITID, pid_com[k], strerror(errno));
         }
 
         char str[50];
-        sprintf(str, "/proc/%d/stat", (int)pid_com[k]);
+        sprintf(str, PROC_STAT, (int)pid_com[k]);
         FILE *file = fopen(str, "r");
         if (file == NULL) {
-          printf("Error in opening proc file\n");
+          printf(ERR_OPEN_PROC);
           continue;
         }
         int z;
         unsigned long h, ut, st;
         long dum;
         unsigned long long stime;
-        fscanf(file, "%d %s %c %d %d %d %d %d %u %lu %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %llu", &z, str, &str[0], &z, &z, &z, &z, &z,
+        fscanf(file, SCAN_F, &z, str, &str[0], &z, &z, &z, &z, &z,
           (unsigned *)&z, &h, &h, &h, &h, &ut, &st, &dum, &dum, &dum, &dum, &dum, &dum, &stime);
         fclose(file);
 
+        //this is the time that the program starts
         double start = (double)(stime*1.0f/sysconf(_SC_CLK_TCK));
 
         struct sysinfo sinfo;
         sysinfo(&sinfo);
-
+        //sysinfo.uptime is the time stamp of right now
+        //here we find the difference between uptime and start
+        //so that we can obtain the run time
         double rtime = (double)sinfo.uptime - start;
         char* prog = (k==0 ? series[k][1] : series[k][0]);
-        fprintf(stdout, FORMAT_STR, (int)pid_com[k], prog, rtime, ut*1.0f/sysconf(_SC_CLK_TCK), st*1.0f/sysconf(_SC_CLK_TCK));
+        fprintf(stdout, TITLE);
+        fprintf(stdout, FORMAT_STR, (int)pid_com[k], prog, rtime, 
+          ut*1.0f/sysconf(_SC_CLK_TCK), st*1.0f/sysconf(_SC_CLK_TCK));
     
         int status;
         waitpid(pid_com[k], &status, 0);
+        
+        fgTerm(pid_com[k]);
       }      
     }else{
-      
       if(!backgd){
         int i;
         for(i=0; i<num_Com; i++){
           int status;
-          if(pid_com[i]>0)
+          if(pid_com[i]>0){
             waitpid(pid_com[i], &status, 0);
+            fgTerm(pid_com[i]);
+          }
         }
       }
-
     }
-
-    
-
+    //free the space alloc in introducing pipes
     freeP(pid_com, pip_num, pfd);
-    
+    //free other allocated spaces
     for(i=0; i<num_Com; i++){
       if(series[i] != NULL)
         free(series[i]);
@@ -422,5 +453,3 @@ int main(){
   //should never reach this point.
   return EXIT_FAILURE;
 }
-
-
